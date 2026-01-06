@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARBH Demon List - Admin</title>
+    <style>
+        :root {
+            --color1: #ff4444;
+            --color2: #ff6600;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0f0f0f;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            font-size: 20px;
+        }
+        h1 {
+            text-align: center;
+            background: linear-gradient(90deg, var(--color1), var(--color2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 36px;
+            margin: 20px 0;
+        }
+        .header {
+            background: linear-gradient(90deg, var(--color1), var(--color2));
+            padding: 10px;
+            text-align: center;
+            border-bottom: 2px solid var(--color1);
+        }
+        .header a {
+            color: #000000;
+            margin: 0 15px;
+            text-decoration: none;
+            font-size: 18px;
+        }
+        .header a:hover {
+            text-decoration: underline;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #1a1a1a;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        input, button {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        button {
+            background: linear-gradient(90deg, var(--color1), var(--color2));
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        .message {
+            text-align: center;
+            margin: 10px 0;
+            color: var(--color1);
+        }
+        footer {
+            text-align: center;
+            padding: 10px;
+            background: linear-gradient(90deg, #2a2a2a, #3a3a3a);
+            color: var(--color1);
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="index.html">Demonlist</a>
+        <a href="stats.html">Stats</a>
+        <a href="changelog.html">Changelog</a>
+        <a href="account.html">Account</a>
+        <a href="admin.html">Admin</a>
+        <button id="settingsBtn" style="background: none; border: none; color: #000000; font-size: 18px; cursor: pointer; margin-left: auto;">⚙️</button>
+    </div>
+    <h1>ARBH Demon List - Admin Panel</h1>
+    <div class="form-container">
+        <h2>Add / Edit Levels</h2>
+        <select id="levelSelect"><option value="">-- Select level to edit --</option></select>
+        <button type="button" id="loadLevelBtn">Load Level for Edit</button>
+        <input type="text" id="levelName" placeholder="Level Name">
+        <input type="text" id="creator" placeholder="Creator">
+        <input type="text" id="verified" placeholder="Verified By">
+        <input type="text" id="listPercent" placeholder="List % (e.g., 72%)">
+        <input type="number" id="points" placeholder="Points">
+        <input type="url" id="thumbnail" placeholder="Thumbnail URL">
+        <input type="url" id="video" placeholder="Video URL">
+        <input type="url" id="page" placeholder="Page URL (e.g., newlevel.html)">
+        <label for="rank">Insert at rank (optional):</label>
+        <input type="number" id="rank" placeholder="Rank (1 = top)" min="1">
+        <button id="addLevelBtn">Add Level</button>
+        <button type="button" id="saveLevelBtn" style="display:none;">Save Changes</button>
+        <button type="button" id="deleteLevelBtn" style="display:none; background: #b00;">Delete Level</button>
+        <div class="message" id="message"></div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" style="display: none; position: fixed; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+        <div style="background-color: #1a1a1a; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 400px; color: white;">
+            <span id="closeModal" style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            <h2>Settings</h2>
+            <label for="color1">Color 1:</label>
+            <input type="color" id="color1" value="#ff4444"><br><br>
+            <label for="color2">Color 2:</label>
+            <input type="color" id="color2" value="#ff6600"><br><br>
+            <button id="applyColors">Apply</button>
+        </div>
+    </div>
+
+    <script>
+        // Check if admin
+        const currentUser = localStorage.getItem('currentUser');
+        const users = JSON.parse(localStorage.getItem('users')) || [];
+        const user = users.find(u => u.username === currentUser);
+        if (!user || !user.isAdmin) {
+            alert('Access denied. Admin only.');
+            window.location.href = 'account.html';
+        }
+
+        // Utilities
+        const FIXED_PAGE = 'file:///C:/Users/reald/Desktop/arbh%20demonlist/index.html';
+        function computePoints(rank) {
+            const levelsArr = JSON.parse(localStorage.getItem('levels')) || [];
+            const m = levelsArr.length || 1;
+            const top = 400;
+            if (m <= 1) return top;
+            const k = Math.log(top) / (m - 1);
+            const val = top * Math.exp(-k * (rank - 1));
+            return Math.round(val * 100) / 100;
+        }
+
+        function extractYouTubeID(url) {
+            if (!url) return null;
+            try {
+                const u = new URL(url);
+                if (u.hostname === 'youtu.be') return u.pathname.slice(1);
+                if (u.searchParams && u.searchParams.get('v')) return u.searchParams.get('v');
+                const path = u.pathname.split('/').pop();
+                return path || null;
+            } catch (e) {
+                const m = url.match(/(?:v=|youtu\.be\/|v\/|embed\/)([A-Za-z0-9_-]{11})/);
+                return m ? m[1] : null;
+            }
+        }
+
+        function populateLevelSelect() {
+            const sel = document.getElementById('levelSelect');
+            const levels = JSON.parse(localStorage.getItem('levels')) || [];
+            sel.innerHTML = '<option value="">-- Select level to edit --</option>';
+            levels.sort((a,b) => a.rank - b.rank).forEach(l => {
+                const opt = document.createElement('option');
+                opt.value = l.rank;
+                opt.textContent = `#${l.rank} ${l.name}`;
+                sel.appendChild(opt);
+            });
+        }
+
+        function clearForm() {
+            document.getElementById('levelName').value = '';
+            document.getElementById('creator').value = '';
+            document.getElementById('verified').value = '';
+            document.getElementById('listPercent').value = '';
+            document.getElementById('points').value = '';
+            document.getElementById('thumbnail').value = '';
+            document.getElementById('video').value = '';
+            document.getElementById('page').value = '';
+            document.getElementById('rank').value = '';
+            window.editingRank = null;
+            document.getElementById('saveLevelBtn').style.display = 'none';
+            document.getElementById('deleteLevelBtn').style.display = 'none';
+        }
+
+        // Add level
+        document.getElementById('addLevelBtn').addEventListener('click', () => {
+            const name = document.getElementById('levelName').value;
+            const creator = document.getElementById('creator').value;
+            const verified = document.getElementById('verified').value;
+            const listPercent = document.getElementById('listPercent').value;
+            const thumbnail = document.getElementById('thumbnail').value;
+            const video = document.getElementById('video').value;
+
+            // if thumbnail not provided, derive from video
+            let finalThumbnail = thumbnail;
+            if (!finalThumbnail) {
+                const id = extractYouTubeID(video);
+                if (id) finalThumbnail = `https://img.youtube.com/vi/${id}/0.jpg`;
+            }
+            // always use fixed page URL
+            const page = FIXED_PAGE;
+            // reflect fixed URL in the input for clarity
+            try { document.getElementById('page').value = FIXED_PAGE; } catch (e) {}
+            const desiredRank = parseInt(document.getElementById('rank').value) || null;
+
+            // determine desired insertion rank (for validation of listPercent)
+            let desiredRankLocal = parseInt(document.getElementById('rank').value) || null;
+            let insertAtLocal = desiredRankLocal && desiredRankLocal >= 1 ? desiredRankLocal : (JSON.parse(localStorage.getItem('levels')) || []).length + 1;
+            if (insertAtLocal > (JSON.parse(localStorage.getItem('levels')) || []).length + 1) insertAtLocal = (JSON.parse(localStorage.getItem('levels')) || []).length + 1;
+
+            // if inserting beyond top 75, listPercent is not required and will be cleared
+            const listPercentRequired = insertAtLocal <= 75;
+
+            if (name && creator && verified && video && page && (!listPercentRequired || listPercent)) {
+                let levels = JSON.parse(localStorage.getItem('levels')) || [];
+                // Determine insertion rank
+                let insertAt = desiredRank && desiredRank >= 1 ? desiredRank : levels.length + 1;
+                if (insertAt > levels.length + 1) insertAt = levels.length + 1;
+
+                // Shift ranks of existing levels at/after insertAt
+                levels.forEach(l => {
+                    if (l.rank >= insertAt) l.rank = l.rank + 1;
+                });
+
+                // compute points for inserted rank
+                const computedPoints = computePoints(insertAt);
+
+                // if inserting beyond 75, clear listPercent
+                const finalListPercent = insertAt <= 75 ? listPercent : '';
+
+                // Insert new level
+                const newLevel = {
+                    rank: insertAt,
+                    name,
+                    creator,
+                    verified,
+                    listPercent: finalListPercent,
+                    points: computedPoints,
+                    thumbnail: finalThumbnail,
+                    video,
+                    page
+                };
+                levels.push(newLevel);
+
+                // Sort and normalize ranks
+                levels.sort((a,b) => a.rank - b.rank);
+                levels = levels.map((l,i) => ({ ...l, rank: i+1 }));
+
+                localStorage.setItem('levels', JSON.stringify(levels));
+
+                // Add to changelog
+                let changelog = JSON.parse(localStorage.getItem('changelog')) || [];
+                changelog.unshift({
+                    date: new Date().toISOString().split('T')[0],
+                    title: 'New Level Added',
+                    description: `Added ${name} by ${creator}.`
+                });
+                localStorage.setItem('changelog', JSON.stringify(changelog));
+
+                showMessage('Level added successfully!', 'green');
+                // Clear form
+                document.querySelectorAll('input').forEach(input => input.value = '');
+            } else {
+                showMessage('Please fill all fields.', 'red');
+            }
+        });
+
+        function showMessage(msg, color) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = msg;
+            messageEl.style.color = color;
+            setTimeout(() => messageEl.textContent = '', 3000);
+        }
+
+        // Populate level select on load
+        populateLevelSelect();
+
+        // Load selected level into form for editing
+        document.getElementById('loadLevelBtn').addEventListener('click', () => {
+            const sel = document.getElementById('levelSelect');
+            const rank = parseInt(sel.value);
+            if (!rank) return showMessage('Please select a level to edit.', 'red');
+            let levels = JSON.parse(localStorage.getItem('levels')) || [];
+            const lvl = levels.find(l => l.rank === rank);
+            if (!lvl) return showMessage('Level not found.', 'red');
+            document.getElementById('levelName').value = lvl.name;
+            document.getElementById('creator').value = lvl.creator;
+            document.getElementById('verified').value = lvl.verified;
+            document.getElementById('listPercent').value = lvl.listPercent || '';
+            // disable listPercent input if rank > 75
+            document.getElementById('listPercent').disabled = (lvl.rank > 75);
+            document.getElementById('points').value = lvl.points || '';
+            document.getElementById('thumbnail').value = lvl.thumbnail || '';
+            document.getElementById('video').value = lvl.video || '';
+            document.getElementById('page').value = lvl.page || FIXED_PAGE;
+            document.getElementById('rank').value = lvl.rank;
+            window.editingRank = lvl.rank;
+            document.getElementById('saveLevelBtn').style.display = 'block';
+            document.getElementById('deleteLevelBtn').style.display = 'block';
+            showMessage('Level loaded for editing.', 'green');
+        });
+
+        // toggle listPercent input based on rank input value
+        document.getElementById('rank').addEventListener('input', (e) => {
+            const v = parseInt(e.target.value) || 0;
+            const disabled = v > 75 || v === 0;
+            document.getElementById('listPercent').disabled = disabled;
+            if (disabled) document.getElementById('listPercent').value = '';
+        });
+
+        // Save changes to an existing level
+        document.getElementById('saveLevelBtn').addEventListener('click', () => {
+            const originalRank = window.editingRank;
+            if (!originalRank) return showMessage('No level loaded.', 'red');
+            const name = document.getElementById('levelName').value;
+            const creator = document.getElementById('creator').value;
+            const verified = document.getElementById('verified').value;
+            const listPercent = document.getElementById('listPercent').value;
+            const thumbnail = document.getElementById('thumbnail').value;
+            const video = document.getElementById('video').value;
+            // enforce fixed page URL on save
+            const page = FIXED_PAGE;
+            try { document.getElementById('page').value = FIXED_PAGE; } catch (e) {}
+            let desiredRank = parseInt(document.getElementById('rank').value) || null;
+
+            // determine insertion rank early for listPercent requirement
+            let levelsForCheck = JSON.parse(localStorage.getItem('levels')) || [];
+            let insertAtCheck = desiredRank && desiredRank >= 1 ? desiredRank : levelsForCheck.length + 1;
+            if (insertAtCheck > levelsForCheck.length + 1) insertAtCheck = levelsForCheck.length + 1;
+            const listPercentRequired = insertAtCheck <= 75;
+
+            if (!(name && creator && verified && video && page && (!listPercentRequired || listPercent))) {
+                return showMessage('Please fill all fields.', 'red');
+            }
+
+            let levels = JSON.parse(localStorage.getItem('levels')) || [];
+
+            // remove original
+            levels = levels.filter(l => l.rank !== originalRank);
+
+            // determine insertion rank
+            let insertAt = desiredRank && desiredRank >= 1 ? desiredRank : levels.length + 1;
+            if (insertAt > levels.length + 1) insertAt = levels.length + 1;
+
+            // shift ranks >= insertAt
+            levels.forEach(l => { if (l.rank >= insertAt) l.rank = l.rank + 1; });
+
+            // determine thumbnail
+            let finalThumbnail = thumbnail;
+            if (!finalThumbnail) {
+                const id = extractYouTubeID(video);
+                if (id) finalThumbnail = `https://img.youtube.com/vi/${id}/0.jpg`;
+            }
+
+            // if saving beyond 75, clear listPercent
+            const finalListPercent = insertAt <= 75 ? listPercent : '';
+
+            const computedPoints = computePoints(insertAt);
+
+            const updatedLevel = {
+                rank: insertAt,
+                name,
+                creator,
+                verified,
+                listPercent: finalListPercent,
+                points: computedPoints,
+                thumbnail: finalThumbnail,
+                video,
+                page
+            };
+            levels.push(updatedLevel);
+            levels.sort((a,b) => a.rank - b.rank);
+            levels = levels.map((l,i) => ({ ...l, rank: i+1 }));
+
+            localStorage.setItem('levels', JSON.stringify(levels));
+
+            let changelog = JSON.parse(localStorage.getItem('changelog')) || [];
+            changelog.unshift({ date: new Date().toISOString().split('T')[0], title: 'Level Edited', description: `Edited ${name}.` });
+            localStorage.setItem('changelog', JSON.stringify(changelog));
+
+            showMessage('Level updated.', 'green');
+            clearForm();
+            populateLevelSelect();
+        });
+
+        // Delete a level
+        document.getElementById('deleteLevelBtn').addEventListener('click', () => {
+            const originalRank = window.editingRank;
+            if (!originalRank) return showMessage('No level loaded.', 'red');
+            if (!confirm('Delete this level?')) return;
+            let levels = JSON.parse(localStorage.getItem('levels')) || [];
+            const lvl = levels.find(l => l.rank === originalRank);
+            levels = levels.filter(l => l.rank !== originalRank);
+            levels = levels.map((l,i) => ({ ...l, rank: i+1 }));
+            localStorage.setItem('levels', JSON.stringify(levels));
+            let changelog = JSON.parse(localStorage.getItem('changelog')) || [];
+            changelog.unshift({ date: new Date().toISOString().split('T')[0], title: 'Level Deleted', description: `Deleted ${lvl ? lvl.name : 'a level'}.` });
+            localStorage.setItem('changelog', JSON.stringify(changelog));
+            showMessage('Level deleted.', 'green');
+            clearForm();
+            populateLevelSelect();
+        });
+
+        // Settings functionality
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeModal = document.getElementById('closeModal');
+        const applyColors = document.getElementById('applyColors');
+        const color1Input = document.getElementById('color1');
+        const color2Input = document.getElementById('color2');
+
+        settingsBtn.addEventListener('click', () => {
+            settingsModal.style.display = 'block';
+        });
+
+        closeModal.addEventListener('click', () => {
+            settingsModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+        });
+
+        applyColors.addEventListener('click', () => {
+            const color1 = color1Input.value;
+            const color2 = color2Input.value;
+            document.documentElement.style.setProperty('--color1', color1);
+            document.documentElement.style.setProperty('--color2', color2);
+            localStorage.setItem('color1', color1);
+            localStorage.setItem('color2', color2);
+            settingsModal.style.display = 'none';
+        });
+
+        // Load saved colors
+        const savedColor1 = localStorage.getItem('color1');
+        const savedColor2 = localStorage.getItem('color2');
+        if (savedColor1) {
+            document.documentElement.style.setProperty('--color1', savedColor1);
+            color1Input.value = savedColor1;
+        }
+        if (savedColor2) {
+            document.documentElement.style.setProperty('--color2', savedColor2);
+            color2Input.value = savedColor2;
+        }
+    </script>
+    <footer>
+        ARBH Demon List - Powered by ARBH / Dolpriin and VinniboyGD
+    </footer>
+</body>
+</html>
